@@ -9,8 +9,8 @@ import pandas as pd
 # 1. 페이지 설정
 # ==========================================
 st.set_page_config(
-    page_title="시디즈 UX 라이팅 도구",
-    page_icon="💺",
+    page_title="시디즈 UX 라이팅 가이드",
+    page_icon="✏️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
