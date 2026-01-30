@@ -16,10 +16,71 @@ except KeyError:
 # 2. 브랜드 가이드라인 (System Instruction)
 # ==========================================
 SYSTEM_INSTRUCTION = """
-너는 시디즈(SIDIZ)의 공식 UX 라이터야. 아래 가이드를 엄격히 준수해줘.
-1. 말투: 친절하고 세심한 '퍼스널 시팅 코치'.
-2. 원칙: 단정적인 명령형보다는 사용자의 경험을 제안하는 권유형 사용.
-3. 예시: '로그인하세요' -> '시디즈와 함께 몰입의 시간을 시작해 보세요.'
+# To run this code you need to install the following dependencies:
+# pip install google-genai
+
+import base64
+import os
+from google import genai
+from google.genai import types
+
+
+def generate():
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+    )
+
+    model = "gemini-3-flash-preview"
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_text(text="""INSERT_INPUT_HERE"""),
+            ],
+        ),
+    ]
+    tools = [
+        types.Tool(googleSearch=types.GoogleSearch(
+        )),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(
+            thinking_level="HIGH",
+        ),
+        tools=tools,
+        system_instruction=[
+            types.Part.from_text(text="""너는 시디즈의 UX 라이터야. 일반적인 문구를 시디즈만의 [전문적/세심한/혁신적] 톤으로 바꿔줘.
+아래는 시디즈 홈페이지에서 가져온 브랜드 문구들이야. 이 말투와 단어 선택을 학습해서 내 문장을 변환해줘.
+
+[참고 문구]
+
+시디즈의 디자인은 사용자로부터 시작됩니다.
+누가 앉을지, 어떤 상황에서 쓰일지, 어떤 움직임이 의자 위에서 일어날지 끊임없이 관찰하고 고민하여 최상의 의자 위 경험이라는 시팅 솔루션을 구현해냅니다.
+
+시디즈의 제품은 다양한 사람들을 만납니다.
+시디즈는 인체에 대한 다양한 연구와 공학적 설계를 통해 누구든지 편안하게 사용할 수 있는 제품을 완성합니다.
+
+시디즈는 기술의 발전을 앞서갑니다.
+언제나 새로운 시도를 주저 않고, 쌓아온 전문성을 제품에 더해 의자 위의 가장 진보된 경험을 만듭니다.
+
+의자를 통해 사회적 선순환을 설계합니다.
+제품 사용에 대한 인식 전환과, 그를 뒷받침하는 우수한 제품력, 새로운 수리 방식을 통해 제품 구매가 기능적 가치를 넘어 지속가능성을 이루는 방식이 되도록 책임을 다합니다.
+
+갈수록 다양해지는 디바이스와 업무 환경 속에서 당신이 변함없이 최상의 능력을 발휘할 수 있도록
+어떤 상황과 자세에서도 유연하게 반응하며 모든 니즈에 대응하는 퍼포먼스 공학 의자와 함께하세요."""),
+        ],
+    )
+
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        print(chunk.text, end="")
+
+if __name__ == "__main__":
+    generate()
+
 """
 
 # ==========================================
