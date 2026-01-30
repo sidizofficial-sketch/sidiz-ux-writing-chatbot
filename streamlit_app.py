@@ -54,9 +54,9 @@ if prompt := st.chat_input("수정할 문구를 입력하세요"):
     with st.chat_message("assistant"):
         # Gemini 모델 호출 (System Instruction 포함)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=SYSTEM_INSTRUCTION
-        )
+    model_name="gemini-1.5-flash-latest", # 또는 "models/gemini-1.5-flash"
+    system_instruction=SYSTEM_INSTRUCTION
+    )
         response = model.generate_content(prompt)
         st.markdown(response.text)
         st.session_state.messages.append({"role": "assistant", "content": response.text})
