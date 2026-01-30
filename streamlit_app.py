@@ -9,7 +9,7 @@ import pandas as pd
 # 1. 페이지 설정
 # ==========================================
 st.set_page_config(
-    page_title="시디즈 UX 라이팅 가이드",
+    page_title="✏️시디즈 UX 라이팅 가이드",
     page_icon="✏️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -21,6 +21,9 @@ st.set_page_config(
 def get_gsheet_client():
     """Google Sheets 클라이언트 초기화"""
     try:
+        if "gcp_service_account" not in st.secrets:
+            return None
+            
         credentials = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
             scopes=[
@@ -30,10 +33,10 @@ def get_gsheet_client():
         )
         return gspread.authorize(credentials)
     except Exception as e:
-        st.error(f"Google Sheets 연동 오류: {e}")
+        st.sidebar.warning(f"⚠️ Google Sheets 연동 안됨")
         return None
 
-def save_feedback_to_sheet(original_text, converted_text, feedback, mode):
+def save_feedback_to_sheet(original_text, converted_text, feedback, mode, reason="", comment=""):
     """피드백을 Google Sheets에 저장"""
     try:
         client = get_gsheet_client()
@@ -48,7 +51,7 @@ def save_feedback_to_sheet(original_text, converted_text, feedback, mode):
         
         # 헤더 확인
         if sheet.row_count == 0 or sheet.cell(1, 1).value != "시간":
-            sheet.insert_row(["시간", "모드", "원본 문구", "변환된 문구", "피드백", "피드백값"], 1)
+            sheet.insert_row(["시간", "모드", "원본 문구", "변환된 문구", "피드백", "피드백값", "싫어요 사유", "코멘트"], 1)
         
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -56,14 +59,15 @@ def save_feedback_to_sheet(original_text, converted_text, feedback, mode):
             original_text,
             converted_text,
             "👍" if feedback == 1 else "👎",
-            feedback
+            feedback,
+            reason,
+            comment
         ]
         
         sheet.append_row(row)
         return True
         
     except Exception as e:
-        st.error(f"저장 오류: {e}")
         return False
 
 def load_negative_feedback():
@@ -91,12 +95,15 @@ def load_negative_feedback():
         if negative_df.empty:
             return ""
         
-        # Negative Prompt 생성
+        # Negative Prompt 생성 (사유와 코멘트 포함)
         negative_examples = ""
-        for _, row in negative_df.tail(10).iterrows():  # 최근 10개만
+        for _, row in negative_df.tail(10).iterrows():
             negative_examples += f"""
 원본: "{row['원본 문구']}"
-나쁜 변환: "{row['변환된 문구']}" ← 이런 스타일 피하기
+나쁜 변환: "{row['변환된 문구']}" 
+사유: {row.get('싫어요 사유', 'N/A')}
+코멘트: {row.get('코멘트', 'N/A')}
+← 이런 스타일 절대 피하기
 """
         
         return f"""
@@ -136,7 +143,6 @@ def get_gemini_model():
 def generate_prompt(mode, user_input, negative_feedback):
     """모드별 프롬프트 생성"""
     
-    # 공통 베이스 (Google AI Studio에 이미 학습된 가이드 활용)
     base_instruction = f"""
 너는 시디즈의 전문 UX 라이터야. 사용자가 입력한 일반 문구를 시디즈만의 브랜드 보이스로 변환해줘.
 
@@ -165,11 +171,10 @@ def generate_prompt(mode, user_input, negative_feedback):
 원본: "허리 아픔"
 변환: "척추의 자연스러운 곡선을 존중하여, 장시간 착석에도 편안한 자세를 유지할 수 있도록 설계했습니다"
 
-원본: "고급스러운 디자인"
-변환: "공간의 품격을 높이는 세련된 디자인으로, 당신의 일상에 프리미엄 경험을 더합니다"
+**중요**: 출처 URL은 포함하지 마세요.
 """
     
-    else:  # SEO/GEO 모드
+    else:
         mode_instruction = """
 [SEO/GEO 모드 - 검색 최적화 + 증거 기반]
 
@@ -181,27 +186,45 @@ def generate_prompt(mode, user_input, negative_feedback):
 2. **시디즈 공식 데이터 근거**: 가능하면 수치나 사실을 포함
    - "시디즈 연구소의 인체공학 연구 기반"
    - "20년 이상의 의자 제조 노하우"
-   - "(kr.sidiz.com)" 출처 표기
    
 3. **구조화된 정보**: 검색엔진이 이해하기 쉬운 명확한 문장
-   - 주어 + 서술어 명확
-   - 핵심 정보를 문장 앞부분에 배치
-   - 한 문장 = 하나의 핵심 메시지
-   
 4. **브랜드 톤 유지**: SEO를 위해 브랜드 감성을 잃지 않음
 
+**출처 표기 규칙 (매우 중요!):**
+- 변환된 본문 내용을 먼저 작성
+- 한 줄 띄우기
+- "출처: [URL]" 형식으로 별도 줄에 표기
+- URL은 내용과 관련이 있을 때만 포함
+
+출처 URL 기준:
+- 특정 제품 언급 시: kr.sidiz.com/product/[제품명]
+- 매장/지점 정보: kr.sidiz.com/store
+- 보증/AS 정보: kr.sidiz.com/support
+- 일반적인 브랜드 소개: 출처 생략 가능
+
 변환 예시:
+
+예시 1 (특정 제품):
+원본: "T50 의자"
+변환:
+시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다. 장시간 착석 시 요통 완화에 특화되어 있으며, 4D 팔걸이로 사무용 의자의 새로운 기준을 제시합니다.
+
+출처: kr.sidiz.com/product/t50
+
+예시 2 (일반 내용 - 출처 생략):
 원본: "편안한 의자"
-변환: "시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다. 20년 이상의 노하우로 개발된 시팅 솔루션입니다. (kr.sidiz.com)"
+변환:
+시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다.
 
-원본: "게이밍 의자"
-변환: "시디즈 게이밍 의자는 장시간 게임 플레이 시에도 요통 완화와 바른 자세 유지를 돕는 인체공학적 설계를 갖추고 있습니다. 오피스 시팅 전문 브랜드의 연구 기반 설계로 프로게이머의 퍼포먼스를 지원합니다. (kr.sidiz.com)"
+예시 3 (매장 정보):
+원본: "가까운 매장"
+변환:
+시디즈 오프라인 매장에서는 전문 상담사와 함께 체형에 맞는 의자를 직접 체험할 수 있습니다.
 
-원본: "허리 아파요"
-변환: "허리 통증 완화에 도움이 되는 시디즈 인체공학 의자는 척추 건강을 위한 요추 지지 기능과 체압 분산 설계를 적용했습니다. 장시간 착석 시에도 편안한 자세 유지가 가능합니다. (kr.sidiz.com)"
+출처: kr.sidiz.com/store
 """
     
-    final_prompt = f"""
+    return f"""
 {base_instruction}
 
 {mode_instruction}
@@ -210,8 +233,6 @@ def generate_prompt(mode, user_input, negative_feedback):
 
 위 입력을 {mode} 모드에 맞춰 변환해줘. 오직 변환된 문구만 출력하고, 부가 설명은 하지 마.
 """
-    
-    return final_prompt
 
 # ==========================================
 # 6. 세션 상태 초기화
@@ -231,11 +252,14 @@ if "feedback_saved" not in st.session_state:
 if "negative_feedback" not in st.session_state:
     st.session_state.negative_feedback = load_negative_feedback()
 
+if "show_dislike_form" not in st.session_state:
+    st.session_state.show_dislike_form = None
+
 # ==========================================
 # 7. 모드 선택 화면
 # ==========================================
 if st.session_state.mode_selected is None:
-    st.title("💺 시디즈 UX 라이팅 도구")
+    st.title("✏️ 시디즈 UX 라이팅 가이드")
     st.markdown("### 변환 모드를 선택하세요")
     st.markdown("---")
     
@@ -273,7 +297,7 @@ if st.session_state.mode_selected is None:
         **추천 용도:**
         - 메타 디스크립션
         - SEO 제목/설명
-        - 상품명 및 카테고리 설명
+        - 제품명 및 카테고리 설명
         """)
         
         if st.button("🔍 SEO/GEO 모드 선택", type="primary", use_container_width=True):
@@ -288,7 +312,7 @@ if st.session_state.mode_selected is None:
 # ==========================================
 # 8. 메인 UI (모드 선택 후)
 # ==========================================
-st.title(f"💺 시디즈 UX 라이팅 도구 - {st.session_state.mode_selected} 모드")
+st.title(f"✏️ 시디즈 UX 라이팅 가이드 - {st.session_state.mode_selected} 모드")
 
 # 모드 변경 버튼
 col1, col2, col3 = st.columns([1, 1, 4])
@@ -324,7 +348,7 @@ if len(st.session_state.messages) == 0:
         st.code("편안한 의자", language=None)
         st.code("허리가 아파요", language=None)
     with col2:
-        st.code("고급스러운 디자인", language=None)
+        st.code("T50 의자", language=None)
         st.code("가성비 좋은 의자", language=None)
 
 # ==========================================
@@ -334,10 +358,18 @@ for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         
-        # 피드백 버튼 (마지막 assistant 메시지에만)
+        # 복사 버튼 + 피드백 버튼 (마지막 assistant 메시지에만)
         if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
             st.markdown("---")
-            st.markdown("**이 답변이 도움이 되었나요?**")
+            
+            # 복사 버튼
+            col_copy, col_space = st.columns([1, 5])
+            with col_copy:
+                if st.button("📋 전체 복사", key=f"copy_{i}", use_container_width=True):
+                    st.code(message["content"], language=None)
+                    st.info("👆 위 텍스트를 드래그해서 복사하세요 (Ctrl+A → Ctrl+C)")
+            
+            st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
             
             col1, col2, col3 = st.columns([1, 1, 4])
             
@@ -358,20 +390,63 @@ for i, message in enumerate(st.session_state.messages):
             
             with col2:
                 if st.button("👎 싫어요", key=f"dislike_{i}"):
-                    if i not in st.session_state.feedback_saved:
-                        st.session_state.feedback_data[i] = {
-                            "message": message["content"],
-                            "feedback": 0,
-                            "prompt": st.session_state.messages[i-1]["content"] if i > 0 else ""
-                        }
-                        
-                        original = st.session_state.messages[i-1]["content"] if i > 0 else ""
-                        if save_feedback_to_sheet(original, message["content"], 0, st.session_state.mode_selected):
-                            st.warning("👎 피드백이 저장되었습니다. 다음 답변부터 개선하겠습니다!")
-                            st.session_state.feedback_saved.add(i)
-                            # 부정 피드백 즉시 반영
-                            st.session_state.negative_feedback = load_negative_feedback()
-                            st.rerun()
+                    st.session_state.show_dislike_form = i
+                    st.rerun()
+            
+            # 싫어요 폼 표시
+            if st.session_state.show_dislike_form == i and i not in st.session_state.feedback_saved:
+                st.markdown("---")
+                st.markdown("#### 📝 피드백을 자세히 알려주세요")
+                
+                # 사유 선택
+                reason = st.selectbox(
+                    "싫어요 사유",
+                    [
+                        "선택하세요",
+                        "브랜드 톤이 맞지 않음",
+                        "너무 형식적임",
+                        "너무 길어요",
+                        "너무 짧아요",
+                        "키워드가 부족함",
+                        "과장된 표현",
+                        "원문과 너무 달라짐",
+                        "출처가 부적절함",
+                        "기타"
+                    ],
+                    key=f"reason_{i}"
+                )
+                
+                # 코멘트 입력
+                comment = st.text_area(
+                    "추가 코멘트 (선택사항)",
+                    placeholder="구체적인 피드백을 주시면 더 나은 답변을 만드는 데 도움이 됩니다.",
+                    key=f"comment_{i}",
+                    height=100
+                )
+                
+                col_a, col_b = st.columns([1, 4])
+                
+                with col_a:
+                    if st.button("📤 제출", key=f"submit_{i}", type="primary"):
+                        if reason != "선택하세요":
+                            st.session_state.feedback_data[i] = {
+                                "message": message["content"],
+                                "feedback": 0,
+                                "prompt": st.session_state.messages[i-1]["content"] if i > 0 else "",
+                                "reason": reason,
+                                "comment": comment
+                            }
+                            
+                            original = st.session_state.messages[i-1]["content"] if i > 0 else ""
+                            if save_feedback_to_sheet(original, message["content"], 0, st.session_state.mode_selected, reason, comment):
+                                st.success("✅ 상세한 피드백 감사합니다! 다음 답변부터 개선하겠습니다.")
+                                st.session_state.feedback_saved.add(i)
+                                st.session_state.show_dislike_form = None
+                                # 부정 피드백 즉시 반영
+                                st.session_state.negative_feedback = load_negative_feedback()
+                                st.rerun()
+                        else:
+                            st.warning("사유를 선택해주세요.")
 
 # ==========================================
 # 11. 사용자 입력 처리
@@ -388,7 +463,6 @@ if prompt:
         try:
             model = get_gemini_model()
             
-            # 프롬프트 생성
             full_prompt = generate_prompt(
                 st.session_state.mode_selected,
                 prompt,
@@ -445,3 +519,12 @@ with st.sidebar:
     
     st.markdown("---")
     st.caption("💡 부정 피드백은 자동으로 학습에 반영됩니다")
+```
+
+**주요 변경사항:**
+
+1. ✅ **출처 표기 형식 변경:**
+```
+   [본문 내용]
+   
+   출처: kr.sidiz.com/product/t50
