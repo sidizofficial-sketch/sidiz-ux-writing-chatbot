@@ -2,10 +2,9 @@ import streamlit as st
 import google.generativeai as genai
 
 # ==========================================
-# 1. 보안 설정 (Secrets에서 키 가져오기)
+# 1. 보안 설정
 # ==========================================
 try:
-    # Streamlit Cloud의 Secrets 설정에서 키를 읽어옵니다.
     GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=GOOGLE_API_KEY)
 except KeyError:
@@ -13,9 +12,8 @@ except KeyError:
     st.stop()
 
 # ==========================================
-# 2. 브랜드 가이드라인 (핵심 내용만 추출)
+# 2. 브랜드 가이드라인
 # ==========================================
-# AI Studio에서 작성하신 프롬프트의 핵심만 남겼습니다.
 SYSTEM_INSTRUCTION = """
 너는 시디즈의 UX 라이터야. 일반적인 문구를 시디즈만의 [전문적/세심한/혁신적] 톤으로 바꿔줘.
 아래는 시디즈 홈페이지에서 가져온 브랜드 문구들이야. 이 말투와 단어 선택을 학습해서 내 문장을 변환해줘.
@@ -29,35 +27,89 @@ SYSTEM_INSTRUCTION = """
 """
 
 # ==========================================
-# 3. UI 구성 및 채팅 로직
+# 3. 모델 초기화 (올바른 모델 이름 사용)
+# ==========================================
+@st.cache_resource
+def get_gemini_model():
+    return genai.GenerativeModel(
+        model_name="gemini-1.5-flash",  # 또는 "models/gemini-1.5-flash"
+        system_instruction=SYSTEM_INSTRUCTION
+    )
+
+# ==========================================
+# 4. UI 구성
 # ==========================================
 st.set_page_config(page_title="시디즈 UX 번역기", page_icon="💺")
 st.title("💺 시디즈 UX 라이팅 번역기")
 
+# 세션 상태 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 대화 내역 표시 및 피드백 버튼
+if "feedback_data" not in st.session_state:
+    st.session_state.feedback_data = {}
+
+# ==========================================
+# 5. 대화 내역 표시
+# ==========================================
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
+        # 최신 assistant 메시지에만 피드백 버튼 표시
         if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
-            # 엄지척 피드백 수집
-            st.feedback("thumbs", key=f"feedback_{i}")
+            feedback = st.feedback("thumbs", key=f"feedback_{i}")
+            
+            if feedback is not None:
+                st.session_state.feedback_data[i] = {
+                    "message": message["content"],
+                    "feedback": feedback,
+                    "prompt": st.session_state.messages[i-1]["content"] if i > 0 else ""
+                }
 
-# 사용자 입력 처리
+# ==========================================
+# 6. 사용자 입력 처리
+# ==========================================
 if prompt := st.chat_input("수정할 문구를 입력하세요"):
     st.session_state.messages.append({"role": "user", "content": prompt})
+    
     with st.chat_message("user"):
         st.markdown(prompt)
-
+    
     with st.chat_message("assistant"):
-        # Gemini 모델 호출 (System Instruction 포함)
-        model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash-latest", # 또는 "models/gemini-1.5-flash"
-    system_instruction=SYSTEM_INSTRUCTION
-    )
-        response = model.generate_content(prompt)
-        st.markdown(response.text)
-        st.session_state.messages.append({"role": "assistant", "content": response.text})
+        try:
+            model = get_gemini_model()
+            response = model.generate_content(prompt)
+            assistant_message = response.text
+            
+            st.markdown(assistant_message)
+            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+            
+        except Exception as e:
+            error_message = f"오류가 발생했습니다: {str(e)}"
+            st.error(error_message)
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+
+# ==========================================
+# 7. 사이드바
+# ==========================================
+with st.sidebar:
+    st.header("🎯 사용 가이드")
+    st.markdown("""
+    1. 일반 문구를 입력하세요
+    2. 시디즈 톤으로 변환된 결과를 확인하세요
+    3. 만족도를 👍/👎로 평가해주세요
+    """)
+    
+    if st.button("대화 내역 초기화"):
+        st.session_state.messages = []
+        st.session_state.feedback_data = {}
         st.rerun()
+    
+    if st.session_state.feedback_data:
+        st.divider()
+        st.subheader("📊 피드백 통계")
+        thumbs_up = sum(1 for f in st.session_state.feedback_data.values() if f["feedback"] == 1)
+        thumbs_down = sum(1 for f in st.session_state.feedback_data.values() if f["feedback"] == 0)
+        st.metric("긍정", thumbs_up)
+        st.metric("부정", thumbs_down)
