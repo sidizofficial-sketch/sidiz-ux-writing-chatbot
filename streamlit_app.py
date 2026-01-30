@@ -358,11 +358,15 @@ for i, message in enumerate(st.session_state.messages):
         if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
             st.markdown("---")
             
-            col_copy, col_space = st.columns([1, 5])
-            with col_copy:
-                if st.button("📋 전체 복사", key=f"copy_{i}", use_container_width=True):
-                    st.code(message["content"], language=None)
-                    st.info("👆 위 텍스트를 드래그해서 복사하세요 (Ctrl+A → Ctrl+C)")
+            # 출처 제외하고 복사용 텍스트 생성
+            content_without_source = message["content"]
+            if "\n출처:" in content_without_source:
+                content_without_source = content_without_source.split("\n출처:")[0].strip()
+            
+            # st.code로 복사 버튼 제공
+            with st.expander("📋 텍스트 복사하기"):
+                st.code(content_without_source, language=None)
+                st.caption("👆 우측 상단 복사 버튼을 클릭하세요")
             
             st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
             
