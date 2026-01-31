@@ -5,7 +5,6 @@ import gspread
 from datetime import datetime
 import pandas as pd
 import html
-import time
 
 st.set_page_config(
     page_title="시디즈 UX 라이팅 가이드",
@@ -155,9 +154,6 @@ def get_gemini_model():
     return genai.GenerativeModel(target)
 
 def generate_prompt(mode, user_input, negative_feedback):
-    """모드별 프롬프트 생성"""
-    
-    # 공통 베이스 (Google AI Studio에 이미 학습된 가이드 활용)
     base_instruction = f"""
 너는 시디즈의 전문 UX 라이터야. 사용자가 입력한 일반 문구를 시디즈만의 브랜드 보이스로 변환해줘.
 
@@ -174,55 +170,72 @@ def generate_prompt(mode, user_input, negative_feedback):
 [UX 모드 - 브랜드 감성 & 친절한 조력자]
 
 변환 시 다음에 집중하세요:
-1. **감성적 연결**: 사용자의 감정과 니즈에 공감하는 표현
-2. **친절한 안내**: 전문적이되 따뜻하고 접근하기 쉬운 톤
-3. **경험 중심**: 제품의 스펙보다 사용자가 느낄 경험을 강조
-4. **신뢰감**: 과장 없이 진솔하고 믿을 수 있는 표현
+1. 감성적 연결: 사용자의 감정과 니즈에 공감하는 표현
+2. 친절한 안내: 전문적이되 따뜻하고 접근하기 쉬운 톤
+3. 경험 중심: 제품의 스펙보다 사용자가 느낄 경험을 강조
+4. 신뢰감: 과장 없이 진솔하고 믿을 수 있는 표현
 
 변환 예시:
 원본: "편안한 의자"
 변환: "하루 종일 앉아 있어도 지치지 않도록, 당신의 몸을 세심하게 배려한 시팅 경험을 제공합니다"
 
-원본: "허리 아픔"
-변환: "척추의 자연스러운 곡선을 존중하여, 장시간 착석에도 편안한 자세를 유지할 수 있도록 설계했습니다"
-
-원본: "고급스러운 디자인"
-변환: "공간의 품격을 높이는 세련된 디자인으로, 당신의 일상에 프리미엄 경험을 더합니다"
+중요: 출처 URL은 포함하지 마세요.
 """
     
-    else:  # SEO/GEO 모드
+    else:
         mode_instruction = """
 [SEO/GEO 모드 - 검색 최적화 + 증거 기반]
 
 변환 시 다음을 모두 포함하세요:
-1. **핵심 검색 키워드**: 자연스럽게 통합
-   - 허리 편한 의자, 인체공학 의자, 사무용 의자, 게이밍 의자
-   - 척추 건강, 요통 완화, 장시간 착석, 바른 자세
-   
-2. **시디즈 공식 데이터 근거**: 가능하면 수치나 사실을 포함
-   - "시디즈 연구소의 인체공학 연구 기반"
-   - "20년 이상의 의자 제조 노하우"
-   - "(kr.sidiz.com)" 출처 표기
-   
-3. **구조화된 정보**: 검색엔진이 이해하기 쉬운 명확한 문장
-   - 주어 + 서술어 명확
-   - 핵심 정보를 문장 앞부분에 배치
-   - 한 문장 = 하나의 핵심 메시지
-   
-4. **브랜드 톤 유지**: SEO를 위해 브랜드 감성을 잃지 않음
+1. 핵심 검색 키워드 자연스럽게 통합
+2. 시디즈 공식 데이터 근거 포함
+3. 구조화된 정보
+4. 브랜드 톤 유지
+
+출처 표시 3원칙 (매우 중요!):
+
+[원칙 1] 정확성:
+- 검색 결과에서 답변의 근거가 된 구체적인 상세 페이지 URL을 확보했을 때만 첨부
+- 예: kr.sidiz.com/products/t50 (실제 제품 상세 페이지)
+- 예: kr.sidiz.com/faq/view/78 (특정 FAQ 페이지)
+
+[원칙 2] 정직성:
+- 직접적인 근거가 되는 상세 URL을 찾지 못했다면:
+  * 가짜 주소를 만들지 마세요
+  * 메인 홈페이지(kr.sidiz.com)를 고정으로 넣지 마세요
+  * 카테고리 메인(kr.sidiz.com/products)도 추측으로 넣지 마세요
+
+[원칙 3] 공백 처리:
+- 상세 출처가 없을 때는 '출처' 섹션 자체를 생성하지 마세요
+- 출처가 없는 것이 틀린 출처보다 낫습니다
 
 변환 예시:
+
+예시 1 (출처 있음 - 확실한 상세 URL):
+원본: "T50 제품 정보"
+변환:
+시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다. 장시간 착석 시 요통 완화에 특화되어 있습니다.
+
+출처: kr.sidiz.com/products/t50
+
+예시 2 (출처 없음 - 일반적인 브랜드 정보):
 원본: "편안한 의자"
-변환: "시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다. 20년 이상의 노하우로 개발된 시팅 솔루션입니다. (kr.sidiz.com)"
+변환:
+시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다.
 
-원본: "게이밍 의자"
-변환: "시디즈 게이밍 의자는 장시간 게임 플레이 시에도 요통 완화와 바른 자세 유지를 돕는 인체공학적 설계를 갖추고 있습니다. 오피스 시팅 전문 브랜드의 연구 기반 설계로 프로게이머의 퍼포먼스를 지원합니다. (kr.sidiz.com)"
+(출처 없음)
 
-원본: "허리 아파요"
-변환: "허리 통증 완화에 도움이 되는 시디즈 인체공학 의자는 척추 건강을 위한 요추 지지 기능과 체압 분산 설계를 적용했습니다. 장시간 착석 시에도 편안한 자세 유지가 가능합니다. (kr.sidiz.com)"
+예시 3 (출처 없음 - 일반적인 제품 설명):
+원본: "게이밍 의자 추천"
+변환:
+시디즈 게이밍 의자는 장시간 게임 플레이 시에도 요통 완화와 바른 자세 유지를 돕는 인체공학적 설계를 갖추고 있습니다.
+
+(출처 없음)
+
+중요: 정확한 상세 URL이 없다면 출처를 아예 적지 마세요!
 """
     
-    final_prompt = f"""
+    return f"""
 {base_instruction}
 
 {mode_instruction}
@@ -231,8 +244,6 @@ def generate_prompt(mode, user_input, negative_feedback):
 
 위 입력을 {mode} 모드에 맞춰 변환해줘. 오직 변환된 문구만 출력하고, 부가 설명은 하지 마.
 """
-    
-    return final_prompt
 
 if "mode_selected" not in st.session_state:
     st.session_state.mode_selected = None
@@ -380,26 +391,29 @@ for i, message in enumerate(st.session_state.messages):
                     source_url = "https://" + source_url
                 display_url = source_url.replace("https://", "").replace("http://", "")
                 st.markdown(f'<br>출처: <a href="{source_url}" target="_blank" class="source-link">{display_url}</a>', unsafe_allow_html=True)
+        else:
+            st.markdown(main_text)
+        
+        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
+            st.markdown("---")
+            st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
             
-            # 각 답변마다 피드백 버튼 추가
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            col1, col2, col_space = st.columns([0.5, 0.5, 5])
+            col1, col2, col3 = st.columns([1, 1, 4])
             
             with col1:
-                if st.button("👍", key=f"like_{i}"):
+                if st.button("👍 좋아요", key=f"like_{i}"):
                     if i not in st.session_state.feedback_saved:
                         original = st.session_state.messages[i-1]["content"] if i > 0 else ""
                         if save_feedback_to_sheet(original, message["content"], 1, st.session_state.mode_selected):
+                            st.success("✅ 피드백 감사합니다!")
                             st.session_state.feedback_saved.add(i)
                             st.rerun()
             
             with col2:
-                if st.button("👎", key=f"dislike_{i}"):
+                if st.button("👎 싫어요", key=f"dislike_{i}"):
                     st.session_state.show_dislike_form = i
                     st.rerun()
             
-            # 싫어요 상세 폼
             if st.session_state.show_dislike_form == i and i not in st.session_state.feedback_saved:
                 st.markdown("---")
                 st.markdown("#### 📝 피드백을 자세히 알려주세요")
@@ -439,13 +453,6 @@ for i, message in enumerate(st.session_state.messages):
                             st.rerun()
                     else:
                         st.warning("사유를 선택해주세요.")
-        else:
-            st.markdown(main_text)
-
-# 하단 안내 문구
-if len(st.session_state.messages) > 0:
-    st.markdown("---")
-    st.caption("💡 더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요")
 
 prompt = st.chat_input("변환할 문구를 입력하세요...")
 
@@ -465,70 +472,23 @@ if prompt:
                 st.session_state.negative_feedback
             )
             
-            # Retry logic for rate limiting
-            max_retries = 3
-            retry_count = 0
-            assistant_message = None
+            with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
+                response = model.generate_content(full_prompt)
+                assistant_message = response.text.strip()
             
-            while retry_count < max_retries:
-                try:
-                    with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
-                        response = model.generate_content(full_prompt)
-                        assistant_message = response.text.strip()
-                        
-                    break  # 성공하면 루프 탈출
-                    
-                except Exception as retry_error:
-                    if "429" in str(retry_error) or "quota" in str(retry_error).lower():
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            wait_time = 2 ** retry_count  # 2, 4, 8초
-                            st.warning(f"⏱️ API 할당량 대기 중... ({wait_time}초 후 재시도 {retry_count}/{max_retries})")
-                            time.sleep(wait_time)
-                        else:
-                            raise  # 최대 재시도 초과 시 에러 발생
-                    else:
-                        raise  # 다른 에러는 즉시 발생
-            
-            if assistant_message:
-                st.markdown(assistant_message)
-                st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+            st.markdown(assistant_message)
+            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
             
         except Exception as e:
             error_str = str(e)
             
-            # 상세 에러 로깅
-            st.error(f"❌ 오류 발생")
-            
             if "429" in error_str or "quota" in error_str.lower():
                 st.error("⏱️ **Gemini API 할당량 초과**")
-                st.warning("**무료 티어 제한:**")
-                st.info("""
-                - 분당 15 요청 제한
-                - 1-2분 후 자동 해제됩니다
-                
-                **해결 방법:**
-                1. 잠시 기다린 후 다시 시도
-                2. 유료 플랜 업그레이드 (매우 저렴)
-                """)
-                error_message = "API 할당량이 초과되었습니다. 1-2분 후 다시 시도해주세요."
-            elif "400" in error_str or "invalid" in error_str.lower():
-                st.error("⚠️ **잘못된 요청**")
-                st.warning("모델 설정에 문제가 있을 수 있습니다.")
-                with st.expander("상세 오류 내용"):
-                    st.code(error_str)
-                error_message = "일시적으로 서비스를 사용할 수 없습니다."
-            elif "500" in error_str or "503" in error_str:
-                st.error("🔧 **서버 오류**")
-                st.warning("Gemini API 서버에 일시적인 문제가 있습니다.")
-                error_message = "일시적으로 서비스를 사용할 수 없습니다."
+                st.warning("잠시 후 다시 시도해주세요.")
             else:
-                st.error("⚠️ **알 수 없는 오류**")
-                with st.expander("상세 오류 내용 (개발자용)"):
-                    st.code(error_str)
-                    st.code(f"모드: {st.session_state.mode_selected}")
-                error_message = "일시적으로 서비스를 사용할 수 없습니다."
+                st.error(f"❌ 오류: {error_str}")
             
+            error_message = "일시적으로 서비스를 사용할 수 없습니다."
             st.session_state.messages.append({"role": "assistant", "content": error_message})
     
     st.rerun()
