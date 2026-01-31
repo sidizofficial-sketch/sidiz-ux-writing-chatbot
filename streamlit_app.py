@@ -153,6 +153,15 @@ def get_gemini_model():
     target = next((m for m in model_list if "1.5-flash" in m), model_list[0])
     return genai.GenerativeModel(target)
 
+def get_gemini_model_with_search():
+    """웹 검색 기능이 활성화된 모델"""
+    model_list = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    target = next((m for m in model_list if "1.5-flash" in m), model_list[0])
+    return genai.GenerativeModel(
+        target,
+        tools=[{"google_search": {}}]  # 웹 검색 도구 활성화
+    )
+
 def generate_prompt(mode, user_input, negative_feedback):
     base_instruction = f"""
 너는 시디즈의 전문 UX 라이터야. 사용자가 입력한 일반 문구를 시디즈만의 브랜드 보이스로 변환해줘.
@@ -180,6 +189,44 @@ def generate_prompt(mode, user_input, negative_feedback):
 변환: "하루 종일 앉아 있어도 지치지 않도록, 당신의 몸을 세심하게 배려한 시팅 경험을 제공합니다"
 
 중요: 출처 URL은 포함하지 마세요.
+"""
+    
+    elif mode == "SEARCH":
+        mode_instruction = """
+[홈페이지 정보 탐색 모드]
+
+사용자의 질문에 답하기 위해 시디즈 공식 홈페이지(kr.sidiz.com)에서 정보를 검색하여 답변하세요.
+
+검색 범위:
+- 제품 스펙 및 상세 정보
+- 품질보증 기간 및 A/S 정책
+- 배송 정보 및 예상 일정
+- FAQ 및 고객센터 안내
+- 매장 위치 및 영업 시간
+
+답변 형식:
+1. 질문에 대한 명확한 답변
+2. 추가로 도움이 될 만한 정보
+3. 출처: 검색으로 확인된 정확한 URL만 표기 (원칙 준수)
+
+출처 표시 3원칙:
+- 원칙 1: 검색 결과에서 확보한 구체적 상세 URL만 사용
+- 원칙 2: 상세 URL 없으면 가짜 주소 만들지 않음
+- 원칙 3: 출처가 없으면 출처 섹션 자체를 생성하지 않음
+
+예시:
+
+질문: "T90 품질보증 기간은?"
+답변:
+시디즈 T90 제품의 품질보증 기간은 3년입니다. 정상 사용 중 발생한 제조상 결함에 대해 무상 수리 서비스를 제공합니다.
+
+출처: kr.sidiz.com/service/warranty
+(검색으로 확인된 경우에만)
+
+질문: "지금 예상 배송일은?"
+답변:
+시디즈 공식 홈페이지에서 주문 시 평균 3-5일 이내 배송됩니다. 제품과 지역에 따라 차이가 있을 수 있습니다.
+(정확한 URL을 찾지 못한 경우 출처 생략)
 """
     
     else:
@@ -268,7 +315,7 @@ if st.session_state.mode_selected is None:
     st.markdown("### 변환 모드를 선택하세요")
     st.markdown("---")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("### 🎨 UX 모드")
@@ -309,6 +356,26 @@ if st.session_state.mode_selected is None:
             st.session_state.mode_selected = "SEO/GEO"
             st.rerun()
     
+    with col3:
+        st.markdown("### 🔎 홈페이지 정보 탐색")
+        st.warning("""
+        **시디즈 공식 정보 검색**
+        
+        🔎 제품 스펙 및 품질보증 정보
+        🔎 배송 및 AS 안내
+        🔎 FAQ 및 고객센터 정보
+        🔎 실시간 홈페이지 데이터 기반
+        
+        **추천 질문:**
+        - T90 품질보증 기간은?
+        - 지금 예상 배송일은?
+        - A/S 신청 방법은?
+        """)
+        
+        if st.button("🔎 홈페이지 탐색 시작", type="primary", use_container_width=True):
+            st.session_state.mode_selected = "SEARCH"
+            st.rerun()
+    
     st.markdown("---")
     st.caption("💡 모드는 언제든 변경할 수 있습니다")
     
@@ -333,21 +400,38 @@ with col2:
 st.markdown("---")
 
 if len(st.session_state.messages) == 0:
-    mode_emoji = "🎨" if st.session_state.mode_selected == "UX" else "🔍"
-    mode_desc = "브랜드 감성 & 친절한 조력자" if st.session_state.mode_selected == "UX" else "검색 최적화 + 증거 기반"
-    
-    st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
-    
-    st.markdown("### 💬 변환할 문구를 입력하세요")
-    st.markdown("**예시:**")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.code("편안한 의자", language=None)
-        st.code("허리가 아파요", language=None)
-    with col2:
-        st.code("T50 의자", language=None)
-        st.code("가성비 좋은 의자", language=None)
+    if st.session_state.mode_selected == "SEARCH":
+        mode_emoji = "🔎"
+        mode_desc = "시디즈 홈페이지 정보 탐색"
+        
+        st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
+        
+        st.markdown("### 💬 궁금한 정보를 질문하세요")
+        st.markdown("**예시:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.code("T90 품질보증 기간은?", language=None)
+            st.code("지금 예상 배송일은?", language=None)
+        with col2:
+            st.code("A/S 신청 방법은?", language=None)
+            st.code("가까운 매장 찾기", language=None)
+    else:
+        mode_emoji = "🎨" if st.session_state.mode_selected == "UX" else "🔍"
+        mode_desc = "브랜드 감성 & 친절한 조력자" if st.session_state.mode_selected == "UX" else "검색 최적화 + 증거 기반"
+        
+        st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
+        
+        st.markdown("### 💬 변환할 문구를 입력하세요")
+        st.markdown("**예시:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.code("편안한 의자", language=None)
+            st.code("허리가 아파요", language=None)
+        with col2:
+            st.code("T50 의자", language=None)
+            st.code("가성비 좋은 의자", language=None)
 
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
@@ -391,29 +475,26 @@ for i, message in enumerate(st.session_state.messages):
                     source_url = "https://" + source_url
                 display_url = source_url.replace("https://", "").replace("http://", "")
                 st.markdown(f'<br>출처: <a href="{source_url}" target="_blank" class="source-link">{display_url}</a>', unsafe_allow_html=True)
-        else:
-            st.markdown(main_text)
-        
-        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
-            st.markdown("---")
-            st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
             
-            col1, col2, col3 = st.columns([1, 1, 4])
+            # 각 답변마다 피드백 버튼 추가
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            col1, col2, col_space = st.columns([0.5, 0.5, 5])
             
             with col1:
-                if st.button("👍 좋아요", key=f"like_{i}"):
+                if st.button("👍", key=f"like_{i}"):
                     if i not in st.session_state.feedback_saved:
                         original = st.session_state.messages[i-1]["content"] if i > 0 else ""
                         if save_feedback_to_sheet(original, message["content"], 1, st.session_state.mode_selected):
-                            st.success("✅ 피드백 감사합니다!")
                             st.session_state.feedback_saved.add(i)
                             st.rerun()
             
             with col2:
-                if st.button("👎 싫어요", key=f"dislike_{i}"):
+                if st.button("👎", key=f"dislike_{i}"):
                     st.session_state.show_dislike_form = i
                     st.rerun()
             
+            # 싫어요 상세 폼
             if st.session_state.show_dislike_form == i and i not in st.session_state.feedback_saved:
                 st.markdown("---")
                 st.markdown("#### 📝 피드백을 자세히 알려주세요")
@@ -453,6 +534,13 @@ for i, message in enumerate(st.session_state.messages):
                             st.rerun()
                     else:
                         st.warning("사유를 선택해주세요.")
+        else:
+            st.markdown(main_text)
+
+# 하단 안내 문구
+if len(st.session_state.messages) > 0:
+    st.markdown("---")
+    st.caption("💡 더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요")
 
 prompt = st.chat_input("변환할 문구를 입력하세요...")
 
@@ -464,7 +552,11 @@ if prompt:
     
     with st.chat_message("assistant"):
         try:
-            model = get_gemini_model()
+            # SEARCH 모드일 때는 웹 검색 활성화된 모델 사용
+            if st.session_state.mode_selected == "SEARCH":
+                model = get_gemini_model_with_search()
+            else:
+                model = get_gemini_model()
             
             full_prompt = generate_prompt(
                 st.session_state.mode_selected,
