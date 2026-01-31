@@ -7,7 +7,7 @@ import pandas as pd
 import time
 
 st.set_page_config(
-    page_title="시디즈 UX 라이팅 어시스턴트",
+    page_title="시디즈 UX 라이팅 가이드",
     page_icon="✏️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -32,23 +32,52 @@ def get_gsheet_client():
 
 def save_feedback_to_sheet(original_text, converted_text, feedback, mode, reason="", comment=""):
     try:
+        # 🔍 Step 1: Secrets 확인
+        if "gcp_service_account" not in st.secrets:
+            st.error("❌ Secrets에 [gcp_service_account] 섹션이 없습니다!")
+            st.info("Streamlit Cloud 설정 → Secrets에 [gcp_service_account] 추가 필요")
+            return False
+        
+        if "feedback_sheet_url" not in st.secrets:
+            st.error("❌ Secrets에 feedback_sheet_url이 없습니다!")
+            st.info("Streamlit Cloud 설정 → Secrets에 feedback_sheet_url 추가 필요")
+            return False
+        
+        # 🔍 Step 2: Google Sheets Client 생성
         client = get_gsheet_client()
         if client is None:
-            print("❌ DEBUG: Google Sheets client is None")
+            st.error("❌ Google Sheets 클라이언트 생성 실패!")
+            st.info("Service Account 인증 정보를 확인하세요")
             return False
         
+        # 🔍 Step 3: Sheet URL 가져오기
         sheet_url = st.secrets.get("feedback_sheet_url", "")
         if not sheet_url:
-            print("❌ DEBUG: feedback_sheet_url not found in secrets")
+            st.error("❌ feedback_sheet_url이 비어있습니다!")
             return False
         
-        print(f"✅ DEBUG: Opening sheet: {sheet_url[:50]}...")
-        sheet = client.open_by_url(sheet_url).sheet1
+        st.info(f"📝 시트 열기 시도: {sheet_url[:50]}...")
         
+        # 🔍 Step 4: Sheet 열기
+        try:
+            sheet = client.open_by_url(sheet_url).sheet1
+            st.success("✅ 시트 열기 성공!")
+        except Exception as sheet_error:
+            st.error(f"❌ 시트 열기 실패: {str(sheet_error)}")
+            st.warning("가능한 원인:")
+            st.markdown("""
+            1. Service Account에 시트 편집 권한이 없음
+            2. 시트 URL이 잘못됨
+            3. 시트가 삭제됨
+            """)
+            return False
+        
+        # 🔍 Step 5: 헤더 확인
         if sheet.row_count == 0 or sheet.cell(1, 1).value != "시간":
-            print("📝 DEBUG: Creating header row")
+            st.info("📝 헤더 생성 중...")
             sheet.insert_row(["시간", "모드", "원본 문구", "변환된 문구", "피드백", "피드백값", "싫어요 사유", "코멘트"], 1)
         
+        # 🔍 Step 6: 데이터 저장
         row = [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             mode,
@@ -60,15 +89,17 @@ def save_feedback_to_sheet(original_text, converted_text, feedback, mode, reason
             comment
         ]
         
-        print(f"💾 DEBUG: Saving row: {row[:4]}...")
+        st.info("💾 데이터 저장 중...")
         sheet.append_row(row)
-        print("✅ DEBUG: Row saved successfully!")
+        st.success("✅ 데이터 저장 완료!")
+        
         return True
         
     except Exception as e:
-        print(f"❌ DEBUG: Error saving feedback: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
+        st.error(f"❌ 예상치 못한 오류: {str(e)}")
+        with st.expander("🔍 상세 오류 내용"):
+            import traceback
+            st.code(traceback.format_exc())
         return False
 
 def load_negative_feedback():
@@ -208,7 +239,7 @@ if "last_api_call_time" not in st.session_state:
     st.session_state.last_api_call_time = None
 
 if st.session_state.mode_selected is None:
-    st.title("✏️ 시디즈 UX 라이팅 어시스턴트")
+    st.title("✏️ 시디즈 UX 라이팅 가이드")
     st.markdown("### 변환 모드를 선택하세요")
     st.markdown("---")
     
@@ -258,7 +289,7 @@ if st.session_state.mode_selected is None:
     
     st.stop()
 
-st.title(f"✏️ 시디즈 UX 라이팅 어시스턴트 - {st.session_state.mode_selected} 모드")
+st.title(f"✏️ 시디즈 UX 라이팅 가이드 - {st.session_state.mode_selected} 모드")
 
 col1, col2, col3 = st.columns([1, 1, 4])
 with col1:
