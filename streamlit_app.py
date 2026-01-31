@@ -5,6 +5,7 @@ import gspread
 from datetime import datetime
 import pandas as pd
 import html
+import time
 
 st.set_page_config(
     page_title="시디즈 UX 라이팅 가이드",
@@ -195,48 +196,18 @@ def generate_prompt(mode, user_input, negative_feedback):
         mode_instruction = """
 [홈페이지 정보 탐색 모드]
 
-**중요: 답변하기 전에 반드시 시디즈 공식 홈페이지(kr.sidiz.com)를 검색하여 최신 정보를 확인하세요.**
+시디즈 공식 홈페이지(kr.sidiz.com)의 정보를 바탕으로 답변하세요.
 
-사용자의 질문에 답하기 위해 다음을 수행하세요:
-1. 먼저 "site:kr.sidiz.com [질문 내용]"으로 웹 검색
-2. 검색 결과에서 관련 정보 확인
-3. 정확한 정보를 바탕으로 답변 작성
-
-검색 범위:
-- 제품 스펙 및 상세 정보
-- 품질보증 기간 및 A/S 정책
-- 배송 정보 및 예상 일정
-- FAQ 및 고객센터 안내
-- 매장 위치 및 영업 시간
-
-답변 형식:
-1. 검색으로 확인된 정확한 정보
-2. 추가로 도움이 될 만한 정보
-3. 출처: 검색으로 확인된 정확한 URL만 표기
-
-출처 표시 3원칙:
-- 원칙 1: 검색 결과에서 확보한 구체적 상세 URL만 사용
-- 원칙 2: 상세 URL 없으면 가짜 주소 만들지 않음
-- 원칙 3: 출처가 없으면 출처 섹션 자체를 생성하지 않음
+답변 원칙:
+1. 제품 스펙, 품질보증(3년), 배송(3-5일), A/S 정보 제공
+2. 정확한 정보만 제공, 추측 금지
+3. 출처: 확실한 URL만 표기 (없으면 생략)
+4. 모를 경우: "고객센터 1588-1857로 문의 권장"
 
 예시:
-
 질문: "T90 품질보증 기간은?"
-웹 검색: site:kr.sidiz.com T90 품질보증
-답변:
-시디즈 T90 제품의 품질보증 기간은 3년입니다. 정상 사용 중 발생한 제조상 결함에 대해 무상 수리 서비스를 제공합니다.
-
-출처: kr.sidiz.com/service/warranty
-(검색으로 확인된 경우에만)
-
-질문: "지금 예상 배송일은?"
-웹 검색: site:kr.sidiz.com 배송 기간
-답변:
-시디즈 공식 홈페이지에서 주문 시 평균 3-5일 이내 배송됩니다. 제품과 지역에 따라 차이가 있을 수 있습니다.
-(정확한 URL을 찾지 못한 경우 출처 생략)
-
-**만약 검색 결과가 없거나 정보를 찾을 수 없다면:**
-"죄송합니다. 해당 정보를 공식 홈페이지에서 확인할 수 없습니다. kr.sidiz.com의 고객센터(1588-1857)로 직접 문의하시는 것을 권장드립니다."
+답변: 시디즈 제품은 3년 품질보증을 제공합니다.
+출처: kr.sidiz.com/service/warranty (확인된 경우만)
 """
     
     else:
@@ -574,12 +545,33 @@ if prompt:
                 st.session_state.negative_feedback
             )
             
-            with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
-                response = model.generate_content(full_prompt)
-                assistant_message = response.text.strip()
+            # Retry logic for rate limiting
+            max_retries = 3
+            retry_count = 0
+            assistant_message = None
             
-            st.markdown(assistant_message)
-            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+            while retry_count < max_retries:
+                try:
+                    with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
+                        response = model.generate_content(full_prompt)
+                        assistant_message = response.text.strip()
+                    break  # 성공하면 루프 탈출
+                    
+                except Exception as retry_error:
+                    if "429" in str(retry_error) or "quota" in str(retry_error).lower():
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            wait_time = 2 ** retry_count  # 2, 4, 8초
+                            st.warning(f"⏱️ API 할당량 대기 중... ({wait_time}초 후 재시도 {retry_count}/{max_retries})")
+                            time.sleep(wait_time)
+                        else:
+                            raise  # 최대 재시도 초과 시 에러 발생
+                    else:
+                        raise  # 다른 에러는 즉시 발생
+            
+            if assistant_message:
+                st.markdown(assistant_message)
+                st.session_state.messages.append({"role": "assistant", "content": assistant_message})
             
         except Exception as e:
             error_str = str(e)
@@ -589,8 +581,16 @@ if prompt:
             
             if "429" in error_str or "quota" in error_str.lower():
                 st.error("⏱️ **Gemini API 할당량 초과**")
-                st.warning("잠시 후 다시 시도해주세요.")
-                error_message = "API 할당량이 초과되었습니다. 잠시 후 다시 시도해주세요."
+                st.warning("**무료 티어 제한:**")
+                st.info("""
+                - 분당 15 요청 제한
+                - 1-2분 후 자동 해제됩니다
+                
+                **해결 방법:**
+                1. 잠시 기다린 후 다시 시도
+                2. 유료 플랜 업그레이드 (매우 저렴)
+                """)
+                error_message = "API 할당량이 초과되었습니다. 1-2분 후 다시 시도해주세요."
             elif "400" in error_str or "invalid" in error_str.lower():
                 st.error("⚠️ **잘못된 요청**")
                 st.warning("모델 설정에 문제가 있을 수 있습니다.")
