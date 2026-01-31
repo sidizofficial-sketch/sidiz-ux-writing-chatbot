@@ -194,20 +194,50 @@ def generate_prompt(mode, user_input, negative_feedback):
     
     elif mode == "SEARCH":
         mode_instruction = """
-[홈페이지 정보 탐색 모드]
+[홈페이지 정보 탐색 모드 - 절대 추측 금지]
 
-시디즈 공식 홈페이지(kr.sidiz.com)의 정보를 바탕으로 답변하세요.
+⚠️ CRITICAL RULES (위반 시 잘못된 정보 제공):
 
-답변 원칙:
-1. 제품 스펙, 품질보증(3년), 배송(3-5일), A/S 정보 제공
-2. 정확한 정보만 제공, 추측 금지
-3. 출처: 확실한 URL만 표기 (없으면 생략)
-4. 모를 경우: "고객센터 1588-1857로 문의 권장"
+1. 전화번호/컨택센터:
+   - 절대로 내부 지식 사용 금지
+   - 검색 결과에 나타난 공식 번호만 사용
+   - 확실하지 않으면 "kr.sidiz.com에서 확인" 안내
 
-예시:
-질문: "T90 품질보증 기간은?"
-답변: 시디즈 제품은 3년 품질보증을 제공합니다.
-출처: kr.sidiz.com/service/warranty (확인된 경우만)
+2. URL 절대 금지 패턴:
+   ❌ kr.sidiz.com/service/delivery (추측)
+   ❌ kr.sidiz.com/product/t50 (추측)
+   ❌ kr.sidiz.com/faq (추측)
+   → 이런 패턴은 절대 생성하지 마세요!
+
+3. URL 허용 조건:
+   ✅ 검색 결과에 정확한 전체 URL이 표시된 경우만
+   ✅ 예: https://kr.sidiz.com/products/detail/t50 (실제 검색됨)
+
+4. 불확실할 때 대응:
+   "자세한 정보는 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
+   또는
+   "정확한 정보는 시디즈 공식 홈페이지에서 확인하실 수 있습니다."
+
+5. 절대 출처 생성 금지:
+   - 출처를 만들어내지 마세요
+   - 검색으로 확인된 URL이 없다면 출처 섹션을 아예 작성하지 마세요
+
+답변 예시:
+
+❌ 나쁜 예:
+"품질보증은 3년입니다.
+출처: kr.sidiz.com/service/warranty"
+→ 이 URL을 검색으로 확인하지 않았다면 절대 금지!
+
+✅ 좋은 예 1 (검색으로 확인한 경우):
+"품질보증은 3년입니다.
+출처: kr.sidiz.com/support/warranty/view/123"
+→ 검색 결과에 실제로 나타난 전체 URL
+
+✅ 좋은 예 2 (확인 못한 경우):
+"품질보증은 3년입니다.
+자세한 내용은 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
+→ 출처 URL 없음, 홈페이지만 안내
 """
     
     else:
@@ -555,6 +585,32 @@ if prompt:
                     with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
                         response = model.generate_content(full_prompt)
                         assistant_message = response.text.strip()
+                        
+                        # SEARCH 모드에서 출처 검증
+                        if st.session_state.mode_selected == "SEARCH" and "\n출처: " in assistant_message:
+                            # 의심스러운 패턴 검출
+                            suspicious_patterns = [
+                                "/service/delivery",
+                                "/service/warranty",
+                                "/service/as",
+                                "/product/",
+                                "/products/t",
+                                "/faq/",
+                                "/support/",
+                                "/customer/"
+                            ]
+                            
+                            source_part = assistant_message.split("\n출처: ")[1] if "\n출처: " in assistant_message else ""
+                            
+                            # 의심스러운 패턴이 있고, 구체적인 ID/번호가 없으면 제거
+                            is_suspicious = any(pattern in source_part.lower() for pattern in suspicious_patterns)
+                            has_specific_id = any(char.isdigit() for char in source_part)  # 숫자 포함 여부
+                            
+                            if is_suspicious and not has_specific_id:
+                                # 출처 제거하고 일반 안내로 변경
+                                main_content = assistant_message.split("\n출처: ")[0]
+                                assistant_message = main_content + "\n\n자세한 정보는 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
+                                
                     break  # 성공하면 루프 탈출
                     
                 except Exception as retry_error:
