@@ -4,7 +4,6 @@ from google.oauth2.service_account import Credentials
 import gspread
 from datetime import datetime
 import pandas as pd
-import html
 import time
 
 st.set_page_config(
@@ -13,40 +12,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-st.markdown("""
-<style>
-.response-container {
-    position: relative;
-    padding: 10px 0;
-}
-
-.copy-button {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: opacity 0.2s;
-    font-size: 18px;
-    padding: 5px 10px;
-}
-
-.copy-button:hover {
-    opacity: 1 !important;
-}
-
-.source-link {
-    color: #0066cc;
-    text-decoration: none;
-}
-
-.source-link:hover {
-    text-decoration: underline;
-}
-</style>
-""", unsafe_allow_html=True)
 
 def get_gsheet_client():
     try:
@@ -157,7 +122,6 @@ def get_gemini_model():
 def generate_prompt(mode, user_input, negative_feedback):
     """모드별 프롬프트 생성"""
     
-    # 공통 베이스 (Google AI Studio에 이미 학습된 가이드 활용)
     base_instruction = f"""
 너는 시디즈의 전문 UX 라이터야. 사용자가 입력한 일반 문구를 시디즈만의 브랜드 보이스로 변환해줘.
 
@@ -174,55 +138,30 @@ def generate_prompt(mode, user_input, negative_feedback):
 [UX 모드 - 브랜드 감성 & 친절한 조력자]
 
 변환 시 다음에 집중하세요:
-1. **감성적 연결**: 사용자의 감정과 니즈에 공감하는 표현
-2. **친절한 안내**: 전문적이되 따뜻하고 접근하기 쉬운 톤
-3. **경험 중심**: 제품의 스펙보다 사용자가 느낄 경험을 강조
-4. **신뢰감**: 과장 없이 진솔하고 믿을 수 있는 표현
+1. 감성적 연결: 사용자의 감정과 니즈에 공감
+2. 친절한 안내: 따뜻하고 접근하기 쉬운 톤
+3. 경험 중심: 사용자가 느낄 경험 강조
+4. 신뢰감: 과장 없이 진솔한 표현
 
-변환 예시:
-원본: "편안한 의자"
-변환: "하루 종일 앉아 있어도 지치지 않도록, 당신의 몸을 세심하게 배려한 시팅 경험을 제공합니다"
-
-원본: "허리 아픔"
-변환: "척추의 자연스러운 곡선을 존중하여, 장시간 착석에도 편안한 자세를 유지할 수 있도록 설계했습니다"
-
-원본: "고급스러운 디자인"
-변환: "공간의 품격을 높이는 세련된 디자인으로, 당신의 일상에 프리미엄 경험을 더합니다"
+예시:
+"편안한 의자" → "하루 종일 앉아 있어도 지치지 않도록, 당신의 몸을 세심하게 배려한 시팅 경험을 제공합니다"
 """
     
     else:  # SEO/GEO 모드
         mode_instruction = """
 [SEO/GEO 모드 - 검색 최적화 + 증거 기반]
 
-변환 시 다음을 모두 포함하세요:
-1. **핵심 검색 키워드**: 자연스럽게 통합
-   - 허리 편한 의자, 인체공학 의자, 사무용 의자, 게이밍 의자
-   - 척추 건강, 요통 완화, 장시간 착석, 바른 자세
-   
-2. **시디즈 공식 데이터 근거**: 가능하면 수치나 사실을 포함
-   - "시디즈 연구소의 인체공학 연구 기반"
-   - "20년 이상의 의자 제조 노하우"
-   - "(kr.sidiz.com)" 출처 표기
-   
-3. **구조화된 정보**: 검색엔진이 이해하기 쉬운 명확한 문장
-   - 주어 + 서술어 명확
-   - 핵심 정보를 문장 앞부분에 배치
-   - 한 문장 = 하나의 핵심 메시지
-   
-4. **브랜드 톤 유지**: SEO를 위해 브랜드 감성을 잃지 않음
+포함 요소:
+1. 핵심 키워드: 허리 편한 의자, 인체공학 의자, 척추 건강, 요통 완화
+2. 데이터 근거: "시디즈 연구소 기반", "20년 노하우", "(kr.sidiz.com)"
+3. 명확한 문장: 주어+서술어, 핵심 정보 앞배치
+4. 브랜드 톤 유지
 
-변환 예시:
-원본: "편안한 의자"
-변환: "시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다. 20년 이상의 노하우로 개발된 시팅 솔루션입니다. (kr.sidiz.com)"
-
-원본: "게이밍 의자"
-변환: "시디즈 게이밍 의자는 장시간 게임 플레이 시에도 요통 완화와 바른 자세 유지를 돕는 인체공학적 설계를 갖추고 있습니다. 오피스 시팅 전문 브랜드의 연구 기반 설계로 프로게이머의 퍼포먼스를 지원합니다. (kr.sidiz.com)"
-
-원본: "허리 아파요"
-변환: "허리 통증 완화에 도움이 되는 시디즈 인체공학 의자는 척추 건강을 위한 요추 지지 기능과 체압 분산 설계를 적용했습니다. 장시간 착석 시에도 편안한 자세 유지가 가능합니다. (kr.sidiz.com)"
+예시:
+"편안한 의자" → "시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다. (kr.sidiz.com)"
 """
     
-    final_prompt = f"""
+    return f"""
 {base_instruction}
 
 {mode_instruction}
@@ -231,8 +170,6 @@ def generate_prompt(mode, user_input, negative_feedback):
 
 위 입력을 {mode} 모드에 맞춰 변환해줘. 오직 변환된 문구만 출력하고, 부가 설명은 하지 마.
 """
-    
-    return final_prompt
 
 if "mode_selected" not in st.session_state:
     st.session_state.mode_selected = None
@@ -344,50 +281,31 @@ for i, message in enumerate(st.session_state.messages):
         main_text = content
         source_url = None
         
+        # 출처 분리
         if "\n출처: " in content:
             parts = content.split("\n출처: ")
             main_text = parts[0]
             source_url = parts[1].strip() if len(parts) > 1 else None
         
         if message["role"] == "assistant":
-            # 출처 제외한 본문만 추출
-            copy_content = main_text
-            safe_text = html.escape(copy_content)
+            # 본문 출력
+            st.markdown(main_text)
             
-            copy_script = """
-            <div class="response-container">
-                <div style="padding-right: 50px;">""" + main_text + """</div>
-                <button class="copy-button" onclick="copyText""" + str(i) + """()" id="copy-btn-""" + str(i) + """" style="opacity: 0.6;">📋</button>
-            </div>
-            <div id="copy-text-""" + str(i) + """" style="display:none;">""" + safe_text + """</div>
-            <script>
-            function copyText""" + str(i) + """() {
-                const textElement = document.getElementById('copy-text-""" + str(i) + """');
-                const text = textElement.textContent;
-                navigator.clipboard.writeText(text).then(() => {
-                    const btn = document.getElementById('copy-btn-""" + str(i) + """');
-                    btn.innerHTML = '✓';
-                    setTimeout(() => { btn.innerHTML = '📋'; }, 2000);
-                });
-            }
-            </script>
-            """
-            
-            st.markdown(copy_script, unsafe_allow_html=True)
-            
+            # 출처가 있으면 한 줄 띄우고 하이퍼링크로 출력
             if source_url:
                 if not source_url.startswith("http"):
                     source_url = "https://" + source_url
-                display_url = source_url.replace("https://", "").replace("http://", "")
-                st.markdown(f'<br>출처: <a href="{source_url}" target="_blank" class="source-link">{display_url}</a>', unsafe_allow_html=True)
+                st.markdown("")  # 한 줄 공백
+                st.markdown(f"📎 출처: [{source_url}]({source_url})")
             
-            # 각 답변마다 피드백 버튼 추가
-            st.markdown("<br>", unsafe_allow_html=True)
+            # 피드백 영역
+            st.markdown("")  # 한 줄 공백
+            st.caption("💡 더 나은 답변을 위해 피드백을 남겨주세요")
             
-            col1, col2, col_space = st.columns([0.5, 0.5, 5])
+            col1, col2, col_space = st.columns([0.8, 0.8, 5])
             
             with col1:
-                if st.button("👍", key=f"like_{i}"):
+                if st.button("👍 좋아요", key=f"like_{i}"):
                     if i not in st.session_state.feedback_saved:
                         original = st.session_state.messages[i-1]["content"] if i > 0 else ""
                         if save_feedback_to_sheet(original, message["content"], 1, st.session_state.mode_selected):
@@ -395,7 +313,7 @@ for i, message in enumerate(st.session_state.messages):
                             st.rerun()
             
             with col2:
-                if st.button("👎", key=f"dislike_{i}"):
+                if st.button("👎 싫어요", key=f"dislike_{i}"):
                     st.session_state.show_dislike_form = i
                     st.rerun()
             
@@ -440,12 +358,8 @@ for i, message in enumerate(st.session_state.messages):
                     else:
                         st.warning("사유를 선택해주세요.")
         else:
+            # 사용자 메시지는 그대로 출력
             st.markdown(main_text)
-
-# 하단 안내 문구
-if len(st.session_state.messages) > 0:
-    st.markdown("---")
-    st.caption("💡 더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요")
 
 prompt = st.chat_input("변환할 문구를 입력하세요...")
 
@@ -465,56 +379,33 @@ if prompt:
                 st.session_state.negative_feedback
             )
             
-            # Retry logic for rate limiting
-            max_retries = 3
-            retry_count = 0
-            assistant_message = None
-            
-            while retry_count < max_retries:
-                try:
-                    with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
-                        response = model.generate_content(full_prompt)
-                        assistant_message = response.text.strip()
-                        
-                    break  # 성공하면 루프 탈출
-                    
-                except Exception as retry_error:
-                    if "429" in str(retry_error) or "quota" in str(retry_error).lower():
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            wait_time = 2 ** retry_count  # 2, 4, 8초
-                            st.warning(f"⏱️ API 할당량 대기 중... ({wait_time}초 후 재시도 {retry_count}/{max_retries})")
-                            time.sleep(wait_time)
-                        else:
-                            raise  # 최대 재시도 초과 시 에러 발생
-                    else:
-                        raise  # 다른 에러는 즉시 발생
-            
-            if assistant_message:
+            # ✅ 재시도 제거 - 429 에러는 재시도해도 소용없음!
+            with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
+                response = model.generate_content(full_prompt)
+                assistant_message = response.text.strip()
+                
                 st.markdown(assistant_message)
                 st.session_state.messages.append({"role": "assistant", "content": assistant_message})
             
         except Exception as e:
             error_str = str(e)
             
-            # 상세 에러 로깅
             st.error(f"❌ 오류 발생")
             
             if "429" in error_str or "quota" in error_str.lower():
-                st.error("⏱️ **Gemini API 할당량 초과**")
-                st.warning("**무료 티어 제한:**")
-                st.info("""
-                - 분당 15 요청 제한
-                - 1-2분 후 자동 해제됩니다
+                st.error("⏱️ **API 할당량 초과**")
+                st.warning("""
+                **무료 티어 제한: 분당 15 요청**
                 
-                **해결 방법:**
-                1. 잠시 기다린 후 다시 시도
-                2. 유료 플랜 업그레이드 (매우 저렴)
+                📌 **원인:** 너무 빠르게 연속으로 질문했습니다
+                
+                ⏰ **해결 방법:**
+                - 1-2분 후 다시 시도하세요
+                - 질문 간격을 5초 이상 두세요
                 """)
                 error_message = "API 할당량이 초과되었습니다. 1-2분 후 다시 시도해주세요."
             elif "400" in error_str or "invalid" in error_str.lower():
                 st.error("⚠️ **잘못된 요청**")
-                st.warning("모델 설정에 문제가 있을 수 있습니다.")
                 with st.expander("상세 오류 내용"):
                     st.code(error_str)
                 error_message = "일시적으로 서비스를 사용할 수 없습니다."
@@ -526,7 +417,6 @@ if prompt:
                 st.error("⚠️ **알 수 없는 오류**")
                 with st.expander("상세 오류 내용 (개발자용)"):
                     st.code(error_str)
-                    st.code(f"모드: {st.session_state.mode_selected}")
                 error_message = "일시적으로 서비스를 사용할 수 없습니다."
             
             st.session_state.messages.append({"role": "assistant", "content": error_message})
