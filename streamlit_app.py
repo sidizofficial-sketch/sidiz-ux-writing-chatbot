@@ -27,14 +27,9 @@ st.markdown("""
     background: transparent;
     border: none;
     cursor: pointer;
-    opacity: 0;
     transition: opacity 0.2s;
     font-size: 18px;
     padding: 5px 10px;
-}
-
-.response-container:hover .copy-button {
-    opacity: 0.5;
 }
 
 .copy-button:hover {
@@ -197,23 +192,48 @@ def generate_prompt(mode, user_input, negative_feedback):
 3. 구조화된 정보
 4. 브랜드 톤 유지
 
-출처 표기 규칙:
-- 본문 작성 후 한 줄 띄우기
-- "출처: [URL]" 형식으로 별도 줄에 표기
-- 관련 있을 때만 포함
+출처 표기 규칙 - 3단계 검증 프로세스 (매우 중요!):
 
-출처 URL 기준:
-- 특정 제품: kr.sidiz.com/product/[제품명]
-- 매장 정보: kr.sidiz.com/store
-- 일반 소개: 출처 생략
+[1단계] 검색 결과 우선 원칙:
+- 절대 규칙: 검색 결과에 실제로 존재하는 URL만 사용하세요
+- 조합 금지: "T50 제품이니까 kr.sidiz.com/product/t50이겠지?" 같은 추측 완전 금지
+- 시디즈 URL은 예측 불가능한 구조입니다 (예: /faq/view/123 같은 무작위 숫자)
+
+[2단계] 출처 신뢰도 등급제:
+- A등급 (확실한 URL): 검색으로 확인된 정확한 URL 사용
+  예: kr.sidiz.com/products/t50, kr.sidiz.com/faq/view/78
+- B등급 (불확실한 URL): 카테고리 메인 페이지 사용
+  예: kr.sidiz.com/products, kr.sidiz.com/faq, kr.sidiz.com/service
+- C등급 (출처 미확인): 메인 홈페이지로 통일
+  예: kr.sidiz.com
+
+[3단계] 실전 적용:
+- 정확한 상세 URL을 모르면 → 카테고리 메인 페이지 또는 홈 사용
+- 틀린 상세 주소를 주는 것보다 공식 목록 페이지가 훨씬 낫습니다
+- 의심스러우면 출처를 아예 생략하세요
 
 변환 예시:
 
+예시 1 (A등급 - 확실한 경우):
 원본: "T50 의자"
 변환:
 시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다.
 
-출처: kr.sidiz.com/product/t50
+출처: kr.sidiz.com/products/t50
+
+예시 2 (B등급 - 불확실한 경우):
+원본: "AS 문의"
+변환:
+시디즈 제품 A/S는 공식 홈페이지 고객센터를 통해 신청하실 수 있습니다.
+
+출처: kr.sidiz.com/service
+
+예시 3 (C등급 - 일반 정보):
+원본: "편안한 의자"
+변환:
+시디즈 인체공학 의자는 장시간 착석 시 편안함을 제공합니다.
+
+출처: kr.sidiz.com
 """
     
     return f"""
@@ -342,12 +362,14 @@ for i, message in enumerate(st.session_state.messages):
             source_url = parts[1].strip() if len(parts) > 1 else None
         
         if message["role"] == "assistant":
-            safe_text = html.escape(main_text)
+            # 출처 제외한 본문만 추출
+            copy_content = main_text
+            safe_text = html.escape(copy_content)
             
             copy_script = """
             <div class="response-container">
-                <div style="padding-right: 40px;">""" + main_text + """</div>
-                <button class="copy-button" onclick="copyText""" + str(i) + """()" id="copy-btn-""" + str(i) + """">📋</button>
+                <div style="padding-right: 50px;">""" + main_text + """</div>
+                <button class="copy-button" onclick="copyText""" + str(i) + """()" id="copy-btn-""" + str(i) + """" style="opacity: 0.6;">📋</button>
             </div>
             <div id="copy-text-""" + str(i) + """" style="display:none;">""" + safe_text + """</div>
             <script>
