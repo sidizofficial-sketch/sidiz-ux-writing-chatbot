@@ -154,15 +154,6 @@ def get_gemini_model():
     target = next((m for m in model_list if "1.5-flash" in m), model_list[0])
     return genai.GenerativeModel(target)
 
-def get_gemini_model_with_search():
-    """웹 검색 기능이 활성화된 모델 - SEARCH 모드 전용"""
-    model_list = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-    target = next((m for m in model_list if "1.5-flash" in m), model_list[0])
-    
-    # 웹 검색은 Gemini API에서 기본 제공되지 않을 수 있음
-    # 일반 모델로 폴백하되, 프롬프트에서 "검색하라"고 명시
-    return genai.GenerativeModel(target)
-
 def generate_prompt(mode, user_input, negative_feedback):
     base_instruction = f"""
 너는 시디즈의 전문 UX 라이터야. 사용자가 입력한 일반 문구를 시디즈만의 브랜드 보이스로 변환해줘.
@@ -192,55 +183,7 @@ def generate_prompt(mode, user_input, negative_feedback):
 중요: 출처 URL은 포함하지 마세요.
 """
     
-    elif mode == "SEARCH":
-        mode_instruction = """
-[홈페이지 정보 탐색 모드 - 절대 추측 금지]
-
-⚠️ CRITICAL RULES (위반 시 잘못된 정보 제공):
-
-1. 전화번호/컨택센터:
-   - 절대로 내부 지식 사용 금지
-   - 검색 결과에 나타난 공식 번호만 사용
-   - 확실하지 않으면 "kr.sidiz.com에서 확인" 안내
-
-2. URL 절대 금지 패턴:
-   ❌ kr.sidiz.com/service/delivery (추측)
-   ❌ kr.sidiz.com/product/t50 (추측)
-   ❌ kr.sidiz.com/faq (추측)
-   → 이런 패턴은 절대 생성하지 마세요!
-
-3. URL 허용 조건:
-   ✅ 검색 결과에 정확한 전체 URL이 표시된 경우만
-   ✅ 예: https://kr.sidiz.com/products/detail/t50 (실제 검색됨)
-
-4. 불확실할 때 대응:
-   "자세한 정보는 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
-   또는
-   "정확한 정보는 시디즈 공식 홈페이지에서 확인하실 수 있습니다."
-
-5. 절대 출처 생성 금지:
-   - 출처를 만들어내지 마세요
-   - 검색으로 확인된 URL이 없다면 출처 섹션을 아예 작성하지 마세요
-
-답변 예시:
-
-❌ 나쁜 예:
-"품질보증은 3년입니다.
-출처: kr.sidiz.com/service/warranty"
-→ 이 URL을 검색으로 확인하지 않았다면 절대 금지!
-
-✅ 좋은 예 1 (검색으로 확인한 경우):
-"품질보증은 3년입니다.
-출처: kr.sidiz.com/support/warranty/view/123"
-→ 검색 결과에 실제로 나타난 전체 URL
-
-✅ 좋은 예 2 (확인 못한 경우):
-"품질보증은 3년입니다.
-자세한 내용은 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
-→ 출처 URL 없음, 홈페이지만 안내
-"""
-    
-    else:
+    else:  # SEO/GEO 모드
         mode_instruction = """
 [SEO/GEO 모드 - 검색 최적화 + 증거 기반]
 
@@ -255,13 +198,12 @@ def generate_prompt(mode, user_input, negative_feedback):
 [원칙 1] 정확성:
 - 검색 결과에서 답변의 근거가 된 구체적인 상세 페이지 URL을 확보했을 때만 첨부
 - 예: kr.sidiz.com/products/t50 (실제 제품 상세 페이지)
-- 예: kr.sidiz.com/faq/view/78 (특정 FAQ 페이지)
 
 [원칙 2] 정직성:
 - 직접적인 근거가 되는 상세 URL을 찾지 못했다면:
   * 가짜 주소를 만들지 마세요
   * 메인 홈페이지(kr.sidiz.com)를 고정으로 넣지 마세요
-  * 카테고리 메인(kr.sidiz.com/products)도 추측으로 넣지 마세요
+  * 카테고리 메인도 추측으로 넣지 마세요
 
 [원칙 3] 공백 처리:
 - 상세 출처가 없을 때는 '출처' 섹션 자체를 생성하지 마세요
@@ -272,21 +214,14 @@ def generate_prompt(mode, user_input, negative_feedback):
 예시 1 (출처 있음 - 확실한 상세 URL):
 원본: "T50 제품 정보"
 변환:
-시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다. 장시간 착석 시 요통 완화에 특화되어 있습니다.
+시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다.
 
 출처: kr.sidiz.com/products/t50
 
-예시 2 (출처 없음 - 일반적인 브랜드 정보):
+예시 2 (출처 없음 - 일반 정보):
 원본: "편안한 의자"
 변환:
-시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자로, 척추 건강을 고려한 요추 지지 설계가 특징입니다.
-
-(출처 없음)
-
-예시 3 (출처 없음 - 일반적인 제품 설명):
-원본: "게이밍 의자 추천"
-변환:
-시디즈 게이밍 의자는 장시간 게임 플레이 시에도 요통 완화와 바른 자세 유지를 돕는 인체공학적 설계를 갖추고 있습니다.
+시디즈 인체공학 의자는 장시간 착석 시 허리 편안함을 제공하는 사무용 의자입니다.
 
 (출처 없음)
 
@@ -326,7 +261,7 @@ if st.session_state.mode_selected is None:
     st.markdown("### 변환 모드를 선택하세요")
     st.markdown("---")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### 🎨 UX 모드")
@@ -367,26 +302,6 @@ if st.session_state.mode_selected is None:
             st.session_state.mode_selected = "SEO/GEO"
             st.rerun()
     
-    with col3:
-        st.markdown("### 🔎 홈페이지 정보 탐색")
-        st.warning("""
-        **시디즈 공식 정보 검색**
-        
-        🔎 제품 스펙 및 품질보증 정보
-        🔎 배송 및 AS 안내
-        🔎 FAQ 및 고객센터 정보
-        🔎 실시간 홈페이지 데이터 기반
-        
-        **추천 질문:**
-        - T90 품질보증 기간은?
-        - 지금 예상 배송일은?
-        - A/S 신청 방법은?
-        """)
-        
-        if st.button("🔎 홈페이지 탐색 시작", type="primary", use_container_width=True):
-            st.session_state.mode_selected = "SEARCH"
-            st.rerun()
-    
     st.markdown("---")
     st.caption("💡 모드는 언제든 변경할 수 있습니다")
     
@@ -411,38 +326,21 @@ with col2:
 st.markdown("---")
 
 if len(st.session_state.messages) == 0:
-    if st.session_state.mode_selected == "SEARCH":
-        mode_emoji = "🔎"
-        mode_desc = "시디즈 홈페이지 정보 탐색"
-        
-        st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
-        
-        st.markdown("### 💬 궁금한 정보를 질문하세요")
-        st.markdown("**예시:**")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.code("T90 품질보증 기간은?", language=None)
-            st.code("지금 예상 배송일은?", language=None)
-        with col2:
-            st.code("A/S 신청 방법은?", language=None)
-            st.code("가까운 매장 찾기", language=None)
-    else:
-        mode_emoji = "🎨" if st.session_state.mode_selected == "UX" else "🔍"
-        mode_desc = "브랜드 감성 & 친절한 조력자" if st.session_state.mode_selected == "UX" else "검색 최적화 + 증거 기반"
-        
-        st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
-        
-        st.markdown("### 💬 변환할 문구를 입력하세요")
-        st.markdown("**예시:**")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.code("편안한 의자", language=None)
-            st.code("허리가 아파요", language=None)
-        with col2:
-            st.code("T50 의자", language=None)
-            st.code("가성비 좋은 의자", language=None)
+    mode_emoji = "🎨" if st.session_state.mode_selected == "UX" else "🔍"
+    mode_desc = "브랜드 감성 & 친절한 조력자" if st.session_state.mode_selected == "UX" else "검색 최적화 + 증거 기반"
+    
+    st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**: {mode_desc}")
+    
+    st.markdown("### 💬 변환할 문구를 입력하세요")
+    st.markdown("**예시:**")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.code("편안한 의자", language=None)
+        st.code("허리가 아파요", language=None)
+    with col2:
+        st.code("T50 의자", language=None)
+        st.code("가성비 좋은 의자", language=None)
 
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
@@ -563,11 +461,7 @@ if prompt:
     
     with st.chat_message("assistant"):
         try:
-            # SEARCH 모드일 때는 웹 검색 활성화된 모델 사용
-            if st.session_state.mode_selected == "SEARCH":
-                model = get_gemini_model_with_search()
-            else:
-                model = get_gemini_model()
+            model = get_gemini_model()
             
             full_prompt = generate_prompt(
                 st.session_state.mode_selected,
@@ -586,31 +480,6 @@ if prompt:
                         response = model.generate_content(full_prompt)
                         assistant_message = response.text.strip()
                         
-                        # SEARCH 모드에서 출처 검증
-                        if st.session_state.mode_selected == "SEARCH" and "\n출처: " in assistant_message:
-                            # 의심스러운 패턴 검출
-                            suspicious_patterns = [
-                                "/service/delivery",
-                                "/service/warranty",
-                                "/service/as",
-                                "/product/",
-                                "/products/t",
-                                "/faq/",
-                                "/support/",
-                                "/customer/"
-                            ]
-                            
-                            source_part = assistant_message.split("\n출처: ")[1] if "\n출처: " in assistant_message else ""
-                            
-                            # 의심스러운 패턴이 있고, 구체적인 ID/번호가 없으면 제거
-                            is_suspicious = any(pattern in source_part.lower() for pattern in suspicious_patterns)
-                            has_specific_id = any(char.isdigit() for char in source_part)  # 숫자 포함 여부
-                            
-                            if is_suspicious and not has_specific_id:
-                                # 출처 제거하고 일반 안내로 변경
-                                main_content = assistant_message.split("\n출처: ")[0]
-                                assistant_message = main_content + "\n\n자세한 정보는 시디즈 공식 홈페이지(kr.sidiz.com)를 참고하세요."
-                                
                     break  # 성공하면 루프 탈출
                     
                 except Exception as retry_error:
