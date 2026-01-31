@@ -16,34 +16,30 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. CSS 스타일 추가 (복사 버튼)
+# 2. CSS 스타일 추가 (복사 버튼 - 항상 표시)
 # ==========================================
 st.markdown("""
 <style>
-.copy-button-container {
+.response-container {
     position: relative;
-    margin-top: 10px;
+    padding-right: 40px;
 }
 
 .copy-button {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: 0;
+    top: 0;
     background: transparent;
     border: none;
     cursor: pointer;
-    opacity: 0;
+    opacity: 0.5;
     transition: opacity 0.2s;
     font-size: 20px;
     padding: 5px;
 }
 
-.copy-button-container:hover .copy-button {
-    opacity: 0.6;
-}
-
 .copy-button:hover {
-    opacity: 1 !important;
+    opacity: 1;
 }
 
 .source-link {
@@ -219,23 +215,32 @@ def generate_prompt(mode, user_input, negative_feedback):
 3. 구조화된 정보
 4. 브랜드 톤 유지
 
-출처 표기 규칙:
-- 본문 작성 후 한 줄 띄우기
-- "출처: [URL]" 형식으로 별도 줄에 표기
-- 관련 있을 때만 포함
+출처 표기 규칙 (매우 중요 - 허위 URL 절대 금지):
+- 절대 패턴 기반으로 URL을 생성하지 마세요
+- 실제로 존재하는 페이지 URL만 표기하세요
+- 확실하지 않으면 출처를 생략하세요
+- 본문 작성 후 한 줄 띄우고 "출처: [URL]" 형식으로 표기
 
-출처 URL 기준:
-- 특정 제품: kr.sidiz.com/product/[제품명]
-- 매장 정보: kr.sidiz.com/store
-- 일반 소개: 출처 생략
+출처 표기 가능 케이스:
+- 시디즈 공식 홈페이지 메인: kr.sidiz.com
+- 일반적인 브랜드 소개: 출처 생략
+- 특정 제품 정보: 출처 생략 (실제 URL을 모르므로)
+
+중요: kr.sidiz.com/product/[제품명] 같은 패턴으로 URL을 절대 생성하지 마세요.
+실제 해당 페이지가 존재하는지 확인할 수 없으면 출처를 표기하지 않습니다.
 
 변환 예시:
 
 원본: "T50 의자"
 변환:
 시디즈 T50은 3단계 요추 지지 기능을 제공하는 인체공학 의자입니다.
+(출처 없음 - URL을 확인할 수 없음)
 
-출처: kr.sidiz.com/product/t50
+원본: "시디즈 브랜드"
+변환:
+시디즈는 20년 이상의 인체공학 연구를 바탕으로 한 국내 대표 오피스 시팅 브랜드입니다.
+
+출처: kr.sidiz.com
 """
     
     return f"""
@@ -369,100 +374,110 @@ if len(st.session_state.messages) == 0:
 # ==========================================
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
-        # 본문과 출처 분리
-        content = message["content"]
-        main_text = content
-        source_url = None
-        
-        if "\n출처: " in content:
-            parts = content.split("\n출처: ")
-            main_text = parts[0]
-            source_url = parts[1].strip() if len(parts) > 1 else None
-        
-        # 본문 표시 (복사 가능)
-        st.markdown(f'<div class="copy-button-container">{main_text}</div>', unsafe_allow_html=True)
-        
-        # 출처 링크 표시
-        if source_url:
-            if not source_url.startswith("http"):
-                source_url = "https://" + source_url
-            st.markdown(f'출처: <a href="{source_url}" target="_blank" class="source-link">{source_url.replace("https://", "")}</a>', unsafe_allow_html=True)
-        
-        # 복사 버튼 (JavaScript)
-        if message["role"] == "assistant" and i == len(st.session_state.messages) - 1:
-            copy_text = main_text.replace('"', '\\"').replace('\n', '\\n')
+        if message["role"] == "assistant":
+            # 본문과 출처 분리
+            content = message["content"]
+            main_text = content
+            source_url = None
+            
+            if "\n출처: " in content:
+                parts = content.split("\n출처: ")
+                main_text = parts[0].strip()
+                source_url = parts[1].strip() if len(parts) > 1 else None
+            
+            # 복사 가능한 답변 표시 (항상 보이는 복사 버튼)
+            copy_id = f"copy_{i}_{datetime.now().timestamp()}"
+            
+            # JavaScript로 답변 내용 복사
             st.markdown(f"""
+            <div class="response-container" id="response-{i}">
+                <div style="padding-right: 30px;">{main_text}</div>
+                <button class="copy-button" onclick="copyResponse{i}()" id="copy-btn-{i}">📋</button>
+            </div>
             <script>
-            function copyToClipboard_{i}() {{
-                const text = `{copy_text}`;
+            function copyResponse{i}() {{
+                const text = `{main_text.replace('`', '\\`').replace('$', '\\$')}`;
                 navigator.clipboard.writeText(text).then(() => {{
                     const btn = document.getElementById('copy-btn-{i}');
+                    const originalText = btn.innerHTML;
                     btn.innerHTML = '✓';
-                    setTimeout(() => {{ btn.innerHTML = '📋'; }}, 2000);
+                    setTimeout(() => {{ btn.innerHTML = originalText; }}, 2000);
                 }});
             }}
             </script>
-            <button id="copy-btn-{i}" class="copy-button" onclick="copyToClipboard_{i}()">📋</button>
             """, unsafe_allow_html=True)
             
-            st.markdown("---")
-            st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
+            # 출처 링크 표시
+            if source_url:
+                if not source_url.startswith("http"):
+                    source_url = "https://" + source_url
+                display_url = source_url.replace("https://", "").replace("http://", "")
+                st.markdown(f'<br>출처: <a href="{source_url}" target="_blank" class="source-link">{display_url}</a>', unsafe_allow_html=True)
             
-            col1, col2, col3 = st.columns([1, 1, 4])
-            
-            with col1:
-                if st.button("👍 좋아요", key=f"like_{i}"):
-                    if i not in st.session_state.feedback_saved:
-                        original = st.session_state.messages[i-1]["content"] if i > 0 else ""
-                        if save_feedback_to_sheet(original, message["content"], 1, st.session_state.mode_selected):
-                            st.success("✅ 피드백 감사합니다!")
-                            st.session_state.feedback_saved.add(i)
-                            st.rerun()
-            
-            with col2:
-                if st.button("👎 싫어요", key=f"dislike_{i}"):
-                    st.session_state.show_dislike_form = i
-                    st.rerun()
-            
-            if st.session_state.show_dislike_form == i and i not in st.session_state.feedback_saved:
+            # 피드백 버튼 (마지막 메시지에만)
+            if i == len(st.session_state.messages) - 1:
                 st.markdown("---")
-                st.markdown("#### 📝 피드백을 자세히 알려주세요")
+                st.markdown("**더 나은 답변을 위한 학습을 위해 피드백을 남겨주세요.**")
                 
-                reason = st.selectbox(
-                    "싫어요 사유",
-                    [
-                        "선택하세요",
-                        "브랜드 톤이 맞지 않음",
-                        "너무 형식적임",
-                        "너무 길어요",
-                        "너무 짧아요",
-                        "키워드가 부족함",
-                        "과장된 표현",
-                        "원문과 너무 달라짐",
-                        "출처가 부적절함",
-                        "기타"
-                    ],
-                    key=f"reason_{i}"
-                )
+                col1, col2, col3 = st.columns([1, 1, 4])
                 
-                comment = st.text_area(
-                    "추가 코멘트 (선택사항)",
-                    placeholder="구체적인 피드백을 주시면 더 나은 답변을 만드는 데 도움이 됩니다.",
-                    key=f"comment_{i}",
-                    height=100
-                )
+                with col1:
+                    if st.button("👍 좋아요", key=f"like_{i}"):
+                        if i not in st.session_state.feedback_saved:
+                            original = st.session_state.messages[i-1]["content"] if i > 0 else ""
+                            if save_feedback_to_sheet(original, message["content"], 1, st.session_state.mode_selected):
+                                st.success("✅ 피드백 감사합니다!")
+                                st.session_state.feedback_saved.add(i)
+                                st.rerun()
                 
-                if st.button("📤 제출", key=f"submit_{i}", type="primary"):
-                    if reason != "선택하세요":
-                        original = st.session_state.messages[i-1]["content"] if i > 0 else ""
-                        if save_feedback_to_sheet(original, message["content"], 0, st.session_state.mode_selected, reason, comment):
-                            st.success("✅ 상세한 피드백 감사합니다!")
-                            st.session_state.feedback_saved.add(i)
-                            st.session_state.show_dislike_form = None
-                            st.session_state.negative_feedback = load_negative_feedback()
-                            st.rerun()
-                    else:
-                        st.warning("사유를 선택해주세요.")
+                with col2:
+                    if st.button("👎 싫어요", key=f"dislike_{i}"):
+                        st.session_state.show_dislike_form = i
+                        st.rerun()
+                
+                if st.session_state.show_dislike_form == i and i not in st.session_state.feedback_saved:
+                    st.markdown("---")
+                    st.markdown("#### 📝 피드백을 자세히 알려주세요")
+                    
+                    reason = st.selectbox(
+                        "싫어요 사유",
+                        [
+                            "선택하세요",
+                            "브랜드 톤이 맞지 않음",
+                            "너무 형식적임",
+                            "너무 길어요",
+                            "너무 짧아요",
+                            "키워드가 부족함",
+                            "과장된 표현",
+                            "원문과 너무 달라짐",
+                            "출처가 부적절함",
+                            "허위 URL 생성됨",
+                            "기타"
+                        ],
+                        key=f"reason_{i}"
+                    )
+                    
+                    comment = st.text_area(
+                        "추가 코멘트 (선택사항)",
+                        placeholder="구체적인 피드백을 주시면 더 나은 답변을 만드는 데 도움이 됩니다.",
+                        key=f"comment_{i}",
+                        height=100
+                    )
+                    
+                    if st.button("📤 제출", key=f"submit_{i}", type="primary"):
+                        if reason != "선택하세요":
+                            original = st.session_state.messages[i-1]["content"] if i > 0 else ""
+                            if save_feedback_to_sheet(original, message["content"], 0, st.session_state.mode_selected, reason, comment):
+                                st.success("✅ 상세한 피드백 감사합니다!")
+                                st.session_state.feedback_saved.add(i)
+                                st.session_state.show_dislike_form = None
+                                st.session_state.negative_feedback = load_negative_feedback()
+                                st.rerun()
+                        else:
+                            st.warning("사유를 선택해주세요.")
+        else:
+            # 사용자 메시지
+            st.markdown(message["content"])
 
 # ==========================================
 # 12. 사용자 입력 처리
