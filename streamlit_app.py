@@ -7,7 +7,7 @@ import pandas as pd
 import time
 
 st.set_page_config(
-    page_title="시디즈 UX 라이팅 가이드",
+    page_title="시디즈 UX 라이팅 어시스턴트",
     page_icon="✏️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -208,7 +208,7 @@ if "last_api_call_time" not in st.session_state:
     st.session_state.last_api_call_time = None
 
 if st.session_state.mode_selected is None:
-    st.title("✏️ 시디즈 UX 라이팅 가이드")
+    st.title("✏️ 시디즈 UX 라이팅 어시스턴트")
     st.markdown("### 변환 모드를 선택하세요")
     st.markdown("---")
     
@@ -258,7 +258,7 @@ if st.session_state.mode_selected is None:
     
     st.stop()
 
-st.title(f"✏️ 시디즈 UX 라이팅 가이드 - {st.session_state.mode_selected} 모드")
+st.title(f"✏️ 시디즈 UX 라이팅 어시스턴트 - {st.session_state.mode_selected} 모드")
 
 col1, col2, col3 = st.columns([1, 1, 4])
 with col1:
