@@ -189,6 +189,12 @@ if "negative_feedback" not in st.session_state:
 if "show_dislike_form" not in st.session_state:
     st.session_state.show_dislike_form = None
 
+if "api_call_count" not in st.session_state:
+    st.session_state.api_call_count = 0
+
+if "api_call_log" not in st.session_state:
+    st.session_state.api_call_log = []
+
 if st.session_state.mode_selected is None:
     st.title("✏️ 시디즈 UX 라이팅 가이드")
     st.markdown("### 변환 모드를 선택하세요")
@@ -379,8 +385,17 @@ if prompt:
                 st.session_state.negative_feedback
             )
             
+            # 🔍 API 호출 로깅
+            call_time = datetime.now()
+            st.session_state.api_call_count += 1
+            st.session_state.api_call_log.append({
+                "count": st.session_state.api_call_count,
+                "time": call_time.strftime("%H:%M:%S"),
+                "prompt_length": len(full_prompt)
+            })
+            
             # ✅ 재시도 제거 - 429 에러는 재시도해도 소용없음!
-            with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중..."):
+            with st.spinner(f"시디즈 {st.session_state.mode_selected} 톤으로 변환 중... (API 호출 #{st.session_state.api_call_count})"):
                 response = model.generate_content(full_prompt)
                 assistant_message = response.text.strip()
                 
@@ -394,15 +409,28 @@ if prompt:
             
             if "429" in error_str or "quota" in error_str.lower():
                 st.error("⏱️ **API 할당량 초과**")
-                st.warning("""
-                **무료 티어 제한: 분당 15 요청**
                 
-                📌 **원인:** 너무 빠르게 연속으로 질문했습니다
+                # 실제 호출 횟수 표시
+                st.warning(f"""
+                **현재 세션 API 호출: {st.session_state.api_call_count}회**
+                
+                무료 티어 제한: 분당 15 요청
+                
+                📌 **가능한 원인:**
+                1. 너무 빠르게 연속으로 질문 ({st.session_state.api_call_count}회 호출됨)
+                2. 다른 탭/창에서도 동시 사용 중
+                3. API 키가 다른 서비스와 공유됨
                 
                 ⏰ **해결 방법:**
-                - 1-2분 후 다시 시도하세요
-                - 질문 간격을 5초 이상 두세요
+                - 1-2분 대기 후 다시 시도
+                - 질문 간격을 5초 이상 두기
+                - 새로고침하여 세션 초기화
                 """)
+                
+                with st.expander("🔍 API 호출 로그 확인"):
+                    for log in st.session_state.api_call_log[-15:]:
+                        st.text(f"#{log['count']} - {log['time']}")
+                
                 error_message = "API 할당량이 초과되었습니다. 1-2분 후 다시 시도해주세요."
             elif "400" in error_str or "invalid" in error_str.lower():
                 st.error("⚠️ **잘못된 요청**")
@@ -429,6 +457,18 @@ with st.sidebar:
     st.info(f"{mode_emoji} **{st.session_state.mode_selected} 모드**")
     
     st.markdown("---")
+    
+    # 🔍 API 호출 통계 (디버깅용)
+    if st.session_state.api_call_count > 0:
+        st.markdown("### 🔍 API 호출 통계")
+        st.metric("총 호출 횟수", st.session_state.api_call_count)
+        
+        if st.session_state.api_call_log:
+            with st.expander("📋 호출 로그 보기"):
+                for log in st.session_state.api_call_log[-10:]:  # 최근 10개만
+                    st.text(f"#{log['count']} - {log['time']} ({log['prompt_length']} chars)")
+        
+        st.markdown("---")
     
     if st.session_state.feedback_data:
         st.markdown("### 📈 피드백 통계")
